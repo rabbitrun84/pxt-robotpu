@@ -11,7 +11,8 @@
         "200:A"
       ],
       "expectMotion": true,
-      "note": "standalone add-on, not extracted from markdown"
+      "note": "standalone add-on, not extracted from markdown",
+      "description": "Backslide. PU travels backward while its legs make forward stepping motions. The planted leg drives back slowly \u2014 that is what actually moves it \u2014 while the unweighted leg snaps forward like a step. Button A starts it 0.2s in. Best seen from the side."
     },
     {
       "name": "dance-builtin",
@@ -26,7 +27,8 @@
         "beat:120"
       ],
       "expectMotion": true,
-      "note": "Part 1 \u2014 built-in robotPuPro.dance()"
+      "note": "Part 1 \u2014 built-in robotPuPro.dance()",
+      "description": "The extension's built-in beat-reactive dance. It listens to the microphone, changes pose every few beats and wiggles the head with volume. Driven here by a synthetic 120 BPM beat."
     },
     {
       "name": "dance-beatsync",
@@ -42,7 +44,8 @@
         "beat:120"
       ],
       "expectMotion": true,
-      "note": "Parts 3+4 \u2014 block 2 needs block 1's setPose/gaits. Static without --sound."
+      "note": "Parts 3+4 \u2014 block 2 needs block 1's setPose/gaits. Static without --sound.",
+      "description": "A hand-written beat detector: when loudness crosses a threshold it steps to a new pose from a six-gait table, easing smoothly between them. In a quiet room this program never moves."
     },
     {
       "name": "dance-qlearn",
@@ -57,7 +60,8 @@
         "beat:120"
       ],
       "expectMotion": true,
-      "note": "Part 6 \u2014 self-contained; redeclares names from blocks 1-2, cannot combine"
+      "note": "Part 6 \u2014 self-contained; redeclares names from blocks 1-2, cannot combine",
+      "description": "A dance that learns. A Q-table picks the next pose transition, rewarded by loud 'crowd noise' and penalised by falls, so it gradually settles on a favourite routine."
     },
     {
       "name": "motor-pose",
@@ -76,7 +80,8 @@
         "4000"
       ],
       "expectMotion": true,
-      "note": "pose helpers + easing; block 8 transitions at top level, so motion lands before bootMs"
+      "note": "pose helpers + easing; block 8 transitions at top level, so motion lands before bootMs",
+      "description": "Pose interpolation demo. Eases between a standing pose and a crouch, first with linear blending and then with smooth-step easing, so you can compare how the two feel."
     },
     {
       "name": "motor-bow",
@@ -97,7 +102,8 @@
         "500:A"
       ],
       "expectMotion": true,
-      "note": "doBow() on button A; needs blocks 0-5 for transitionPose"
+      "note": "doBow() on button A; needs blocks 0-5 for transitionPose",
+      "description": "PU takes a bow when button A is pressed: the head pitches down to 140 degrees and back up, eased in and out so the motion looks deliberate rather than abrupt."
     },
     {
       "name": "motor-remote",
@@ -110,7 +116,8 @@
         "6000"
       ],
       "expectMotion": true,
-      "note": "runStringCommand / runKeyValueCommand demo"
+      "note": "runStringCommand / runKeyValueCommand demo",
+      "description": "Remote-control demo. Poses are driven through the same radio command handlers the gamepad uses, rather than by calling the servos directly."
     },
     {
       "name": "motor-step-a",
@@ -123,7 +130,8 @@
         "6000"
       ],
       "expectMotion": true,
-      "note": "servoStepStatus convergence loop"
+      "note": "servoStepStatus convergence loop",
+      "description": "Convergence demo. Every joint is pushed toward a target a small step at a time, looping until all the position errors reach zero."
     },
     {
       "name": "motor-step-b",
@@ -136,7 +144,8 @@
         "6000"
       ],
       "expectMotion": true,
-      "note": "servoStepStatus variant; redeclares block 14's names"
+      "note": "servoStepStatus variant; redeclares block 14's names",
+      "description": "The same convergence loop as motor-step-a, but with a different step size per joint, so the legs arrive more slowly than the head and arms."
     },
     {
       "name": "motor-i2c-read",
@@ -149,7 +158,8 @@
         "2000"
       ],
       "expectMotion": false,
-      "note": "raw bus probe \u2014 selects a register and reads it back; moves nothing"
+      "note": "raw bus probe \u2014 selects a register and reads it back; moves nothing",
+      "description": "Raw bus probe: selects a servo register over I2C and reads the value back. The robot does not move \u2014 this one is about talking to the board, not driving it."
     },
     {
       "name": "motor-i2c-write",
@@ -162,7 +172,8 @@
         "2000"
       ],
       "expectMotion": false,
-      "note": "raw bus ACK probe; moves nothing"
+      "note": "raw bus ACK probe; moves nothing",
+      "description": "Raw bus probe that writes a single byte to check the servo board acknowledges. No motion."
     },
     {
       "name": "yoga-routine",
@@ -174,7 +185,8 @@
         "400"
       ],
       "expectMotion": true,
-      "note": "Stand/Jump/Yoga sequence. Adapted from the beginner `robotPu` namespace to `robotPuPro`. NEEDS --i2c-us: its while-loops drive servos with no basic.pause(), so at zero bus cost the whole motion collapses into one instant."
+      "note": "Stand/Jump/Yoga sequence. Adapted from the beginner `robotPu` namespace to `robotPuPro`. NEEDS --i2c-us: its while-loops drive servos with no basic.pause(), so at zero bus cost the whole motion collapses into one instant.",
+      "description": "Repeats a Stand, Jump, Yoga, Yoga2, Yoga3 loop. Jump and Yoga both split the ankles hard enough to lift one foot clear of the ground; Yoga2 and Yoga3 sweep the right leg between its extremes while the head turns to follow."
     },
     {
       "name": "yoga-sequence",
@@ -187,7 +199,33 @@
         "--skip-boot"
       ],
       "expectMotion": true,
-      "note": "Stand/Jump/Yoga/Yoga2/Yoga3 run ONCE. Needs --i2c-us (while-loops have no basic.pause). --skip-boot is a no-op here: the first servo() call is inside forever(), so ensureRobot()'s ~3.5s calibrate+start lands in the run window, not before it."
+      "note": "Stand/Jump/Yoga/Yoga2/Yoga3 run ONCE. Needs --i2c-us (while-loops have no basic.pause). --skip-boot is a no-op here: the first servo() call is inside forever(), so ensureRobot()'s ~3.5s calibrate+start lands in the run window, not before it.",
+      "description": "One pass through Stand, Jump, Yoga, Yoga2 and Yoga3. Jump splits the ankles 55 degrees and Yoga 70 degrees, each lifting a foot off the ground, then Yoga2 and Yoga3 sweep the right leg from 20 to 170 degrees. Ends standing."
+    },
+    {
+      "name": "kungfu",
+      "md": "../../tutorials/kungfu.md",
+      "blocks": [
+        2
+      ],
+      "args": [
+        "--ms",
+        "20000"
+      ],
+      "expectMotion": true,
+      "note": "Four-gait kungfu routine. Uses TWO forever loops (fast moveServos action engine + slow 2s gait selector) - the pattern that exposed the forever-loop starvation bug. Blocks 0/1 are data literals, 3 is a subset of 2, 4 is a line lifted from inside 2's loop.",
+      "description": "Cycles four kungfu poses, holding each for two seconds: stand, raise a hand on tiptoe, spread both arms, then a wide leg split. A fast action engine eases every joint toward whichever pose is currently selected."
+    },
+    {
+      "name": "kungfu-legs",
+      "file": "programs/kungfu-legs.ts",
+      "args": [
+        "--ms",
+        "20000"
+      ],
+      "expectMotion": true,
+      "description": "Kungfu for a robot with no arm servos. Four poses, two seconds each: ready stance, tiptoe with a front kick, forward lunge, then a wide leg split. Every shape is made with the legs and head; the arm servos stay at 90 throughout.",
+      "note": "Leg-only rewrite of tutorials/kungfu.md. The original puts three of its four gaits in the shoulders/arms (servos 6-9), which are optional hardware."
     }
   ],
   "notRunnable": {
@@ -195,6 +233,12 @@
       "6": "one-line fragment: `const te = easeInOutSmoothStep(t)` \u2014 references an undefined t; meant to be pasted inside a function body",
       "7": "same, cosine variant; conflicts with block 6",
       "9": "duplicate of block 8 with different step counts"
+    },
+    "../../tutorials/kungfu.md": {
+      "0": "data literal: a single gait array, not a program",
+      "1": "data literal: two speed arrays",
+      "3": "subset of block 2's setServoTrim calls",
+      "4": "single moveServos line lifted from inside block 2's forever loop; references currentGait/currentSpeed"
     }
   }
 }

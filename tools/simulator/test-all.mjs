@@ -41,7 +41,11 @@ for (const p of programs) {
     }
 
     const trace = `traces/${p.name}.json`;
-    const run = node(["run.mjs", src, "--out", trace, ...(p.args || [])]);
+    // `description` is for whoever reads the trace ("what does the robot do?").
+    // `note` is a maintainer note about block wiring and gotchas — not shown in the viewer.
+    const desc = p.description ? ["--description", p.description] : [];
+    const named = ["--name", p.name];
+    const run = node(["run.mjs", src, "--out", trace, ...desc, ...named, ...(p.args || [])]);
     if (!(run.stdout || "").includes("trace   :")) {
         const msg = ((run.stdout || "") + (run.stderr || "")).split("\n").filter(Boolean).slice(-2).join(" | ");
         results.push({ name: p.name, state: "RUN FAIL", detail: msg });

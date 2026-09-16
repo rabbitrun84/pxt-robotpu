@@ -47,7 +47,7 @@ async function boot() {
     const want = new URLSearchParams(location.search).get("trace");
     const pick = names.includes(want) ? want
       : names.includes(`${want}.json`) ? `${want}.json`
-      : names.includes("moonwalk-pu.json") ? "moonwalk-pu.json"
+      : names.includes("moonwalk.json") ? "moonwalk.json"
       : names[0];
     sel.value = pick;
     sel.onchange = () => fetchTrace(sel.value).catch((e) => ($("hdr").textContent = e.message));
@@ -66,6 +66,19 @@ function load(t) {
   const secs = rows.length ? ((rows[rows.length - 1][0] - rows[0][0]) / 1000).toFixed(1) : "0";
   $("hdr").textContent =
     `${t.program} · seed ${t.seed} · boot ${t.bootMs ?? "?"}ms · ${rows.length} samples · ${secs}s`;
+
+  // Traces outlive the session that made them, so show what the program was.
+  const about = $("about");
+  if (t.description && t.description.trim()) {
+    about.hidden = false;
+    about.textContent = "";
+    const name = document.createElement("b");
+    name.textContent = t.program + " — ";
+    about.appendChild(name);
+    about.appendChild(document.createTextNode(t.description.trim()));
+  } else {
+    about.hidden = true;
+  }
   $("scrub").max = Math.max(0, rows.length - 1);
   $("scrub").value = 0;
   drawChart();

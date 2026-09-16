@@ -20,6 +20,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { extname, join, normalize, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { describeSource } from "./describe.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..");
@@ -149,6 +150,7 @@ async function buildAndRun(code, opts) {
     SIM_I2C_US: String(opts.i2cUs ?? 0),
     SIM_SKIP_BOOT: opts.skipBoot ? "1" : "",
     SIM_PROGRAM: opts.name || "editor",
+    SIM_DESC: opts.description || describeSource(code),
     SIM_OUT: tracePath,
   };
 

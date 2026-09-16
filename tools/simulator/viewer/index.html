@@ -43,6 +43,14 @@
   td.v { color: var(--accent); text-align: right; }
   .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
   #drop { color: var(--dim); font-size: 12px; }
+  #about {
+    margin: 14px 18px 0; padding: 11px 14px; border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    color: var(--dim); font-size: 12.5px; line-height: 1.6;
+    white-space: pre-wrap; max-height: 210px; overflow: auto;
+  }
+  #about b { color: var(--ink); font-weight: 600; }
 
   /* editor */
   #codePanel { padding: 14px 18px 0; }
@@ -81,6 +89,8 @@
   <span class="meta" id="hdr">loading…</span>
   <span id="drop">· or drop a trace .json here</span>
 </header>
+
+<div id="about" hidden></div>
 
 <section id="codePanel" hidden>
   <div class="panel">

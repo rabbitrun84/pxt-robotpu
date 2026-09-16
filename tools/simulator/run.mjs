@@ -16,6 +16,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { describeSource } from "./describe.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..");
@@ -118,8 +120,9 @@ const env = {
     SIM_BUTTONS: opt("buttons", ""),
     SIM_SOUND: opt("sound", "quiet"),
     SIM_I2C_US: opt("i2c-us", "0"),
+    SIM_DESC: opt("description", describeSource(readFileSync(programPath, "utf8"))),
     SIM_SKIP_BOOT: argv.includes("--skip-boot") ? "1" : "",
-    SIM_PROGRAM: label,
+    SIM_PROGRAM: opt("name", label),
     SIM_OUT: outPath,
 };
 

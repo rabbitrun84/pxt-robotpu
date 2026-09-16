@@ -69,6 +69,10 @@ namespace driver {
         const trace = {
             schema: "robotpu-trace/1",
             program: program,
+            // What this program is, carried with the data so a trace read
+            // months later still explains itself. Set by run.mjs from the
+            // program's doc comment, or by the caller.
+            description: env("SIM_DESC", ""),
             seed: boot.seedUsed,
             durationMs: durationMs,
             bootMs: bootMs,
@@ -91,9 +95,14 @@ namespace driver {
         // only what the program itself did. Boot is several seconds of servo
         // motion that has nothing to do with the routine under test.
         if (env("SIM_SKIP_BOOT", "") === "1") {
-            const kept = hw.trace.filter(function (r) { return r[0] >= bootMs; });
-            trace.rows = kept;
+            // Trim at the end of ROBOT INITIALISATION, not at the end of the
+            // program's top level. A program that walks at top level finishes
+            // long before the driver starts, and trimming at bootMs would throw
+            // the entire program away and show a motionless robot.
+            const cut = sim.initDoneMs >= 0 ? sim.initDoneMs : bootMs;
+            trace.rows = hw.trace.filter(function (r) { return r[0] >= cut; });
             (trace as any).bootTrimmed = true;
+            (trace as any).trimmedAt = cut;
         }
 
         const json = JSON.stringify(trace);

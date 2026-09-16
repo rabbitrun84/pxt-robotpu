@@ -35,6 +35,9 @@ enum WaveShape { Sine = 0, Sawtooth = 1, Triangle = 2, Square = 3, Noise = 4 }
 enum SoundExpressionEffect { None = 0, Vibrato = 1, Tremolo = 2, Warble = 3 }
 enum InterpolationCurve { Linear = 0, Curve = 1, Logarithmic = 2 }
 enum NeoPixelMode { RGB = 1, RGBW = 2, RGB_RGB = 3 }
+// micro:bit V2 logo touch. The numeric values are not load-bearing here —
+// nothing in the simulator dispatches on them, only on the handler registration.
+enum TouchButtonEvent { Pressed = 3, Released = 4, LongPressed = 5 }
 enum IconNames { Heart = 0, Yes = 1, No = 2, Happy = 3, Sad = 4, Asleep = 5, Confused = 6 }
 enum ArrowNames { North = 0, East = 2, South = 4, West = 6 }
 
@@ -88,10 +91,23 @@ namespace sim {
 
     interface Timer { at: number; fn: () => void; fired: boolean; }
 
+    /**
+     * kind: "unknown" until the body has run once as the main fiber.
+     *   "poll"     — pauses exactly once, so re-running it from the top is
+     *                equivalent and it is safe to service during another
+     *                body's pause (a fast action engine).
+     *   "stateful" — pauses more than once, so it carries state across pause
+     *                points. It must always run as the main fiber, never be
+     *                restarted (a routine selector stepping through gaits).
+     */
+    interface ForeverTask { fn: () => void; nextDue: number; kind: string; }
+
     let bgTasks: BgTask[] = [];
-    let foreverTasks: (() => void)[] = [];
+    let foreverTasks: ForeverTask[] = [];
     let timers: Timer[] = [];
     let inBackground = false;
+    let currentForever = -1;   // index of the forever body running as main fiber
+    let mainPauseCount = 0;    // pauses taken by the current main-fiber body
 
     export function reset(): void {
         now = 0;
@@ -123,12 +139,24 @@ namespace sim {
         }
     }
 
+    /**
+     * Virtual time at which robot initialisation finished, or -1.
+     *
+     * ensureRobot() runs `calibrate(); start();` and only THEN registers its
+     * background poll loop, so the first background registration is an exact
+     * marker for "init complete". That is the honest boundary for --skip-boot:
+     * using "when the driver starts" instead would discard any program that
+     * does its work at top level, which is most of them.
+     */
+    export let initDoneMs = -1;
+
     export function registerBackground(fn: () => void): void {
+        if (initDoneMs < 0) initDoneMs = now;
         bgTasks.push({ fn: fn, nextDue: now });
     }
 
     export function registerForever(fn: () => void): void {
-        foreverTasks.push(fn);
+        foreverTasks.push({ fn: fn, nextDue: now, kind: "unknown" });
     }
 
     export function foreverCount(): number { return foreverTasks.length; }
@@ -156,6 +184,7 @@ namespace sim {
             // Unwind this background task; it resumes from the top next slice.
             throw new YieldSignal(ms);
         }
+        mainPauseCount++;
         const target = now + Math.max(0, ms);
         // Service background tasks at their own cadence while time advances.
         // Sample inside the loop too: during a long pause the only thing moving
@@ -164,6 +193,7 @@ namespace sim {
             const step = Math.min(target - now, 1);
             now += step;
             runDueBackground();
+            runDueForevers();
             hw.sample(now);
         }
         hw.sample(now);
@@ -190,6 +220,45 @@ namespace sim {
         }
     }
 
+    /**
+     * While one forever() body is blocked in pause(), let the OTHERS run.
+     *
+     * MakeCode runs each forever() as an independent fiber. kungfu.md relies on
+     * this: a fast action engine (moveServos + pause(10)) alongside a slow
+     * routine selector (pause(2000) between gaits). Calling the bodies
+     * round-robin in lockstep starves the fast loop — it got one call per 2000ms
+     * and the servos crawled a couple of degrees instead of reaching the gait.
+     *
+     * The body being serviced here is re-entered from the top and unwound at its
+     * first pause, exactly like a background task. That is correct for a poll
+     * loop with no state across its pause — which is what a fast action engine
+     * is. A *stateful* body would be restarted, but it is never the one blocked:
+     * the blocked body is the main fiber and is excluded via currentForever.
+     */
+    function runDueForevers(): void {
+        for (let i = 0; i < foreverTasks.length; i++) {
+            if (i === currentForever) continue;
+            const t = foreverTasks[i];
+            // Only poll loops may be re-entered from the top. An unclassified
+            // body might be stateful, so leave it for the main-fiber path.
+            if (t.kind !== "poll") continue;
+            if (now < t.nextDue) continue;
+            inBackground = true;
+            try {
+                t.fn();
+                t.nextDue = now + 20;      // MakeCode's implicit forever yield
+            } catch (e) {
+                if (e instanceof YieldSignal) {
+                    t.nextDue = now + Math.max(1, (e as YieldSignal).ms);
+                } else {
+                    inBackground = false;
+                    throw e;
+                }
+            }
+            inBackground = false;
+        }
+    }
+
     /** Drive registered forever() handlers until the virtual time limit. */
     export function run(limitMs: number): void {
         hw.sample(now);
@@ -202,10 +271,35 @@ namespace sim {
         while (now < limitMs) {
             const before = now;
             runDueTimers();
+
+            // Pick the main fiber. A body known to be stateful must always run
+            // here (it can never be restarted from the top); otherwise take
+            // whichever is due soonest.
+            let pick = -1;
             for (let i = 0; i < foreverTasks.length; i++) {
-                if (now >= limitMs) break;
-                foreverTasks[i]();
+                const t = foreverTasks[i];
+                if (t.kind === "stateful" && t.nextDue <= now) { pick = i; break; }
+                if (pick < 0 || t.nextDue < foreverTasks[pick].nextDue) pick = i;
             }
+            const task = foreverTasks[pick];
+            if (task.nextDue > now) pause(Math.min(task.nextDue - now, limitMs - now));
+            if (now >= limitMs) break;
+
+            currentForever = pick;
+            mainPauseCount = 0;
+            try {
+                task.fn();
+            } finally {
+                currentForever = -1;
+            }
+            // Classify on the first main-fiber run: one pause means a poll loop
+            // that is safe to service during another body's pause; more than
+            // one means it carries state across pause points.
+            if (task.kind === "unknown") {
+                task.kind = mainPauseCount > 1 ? "stateful" : "poll";
+            }
+            task.nextDue = now + 20;   // MakeCode's implicit forever yield
+
             if (now === before) {
                 // A forever body that never pauses would spin forever.
                 guard++;
@@ -410,6 +504,8 @@ namespace input {
     export function temperature(): number { return sensors.temperature; }
     export function isGesture(g: Gesture): boolean { return sensors.gesture === g; }
     export function onButtonPressed(b: Button, cb: () => void): void { buttons.register(b, cb); }
+    export function onLogoEvent(e: TouchButtonEvent, cb: () => void): void { logo.register(e, cb); }
+    export function logoIsPressed(): boolean { return false; }
     export function onGesture(_g: Gesture, _cb: () => void): void { /* not modelled */ }
     export function lightLevel(): number { return 128; }
     export function runningTime(): number { return sim.now; }
@@ -424,6 +520,19 @@ namespace buttons {
         hw.logEvent("button", String(b));
         for (let i = 0; i < handlers.length; i++) {
             if (handlers[i].b === b) handlers[i].cb();
+        }
+    }
+}
+
+/** Logo touch handlers, so a test can trigger them like buttons. */
+namespace logo {
+    let handlers: { e: TouchButtonEvent; cb: () => void }[] = [];
+    export function reset(): void { handlers = []; }
+    export function register(e: TouchButtonEvent, cb: () => void): void { handlers.push({ e: e, cb: cb }); }
+    export function fire(e: TouchButtonEvent): void {
+        hw.logEvent("logo", String(e));
+        for (let i = 0; i < handlers.length; i++) {
+            if (handlers[i].e === e) handlers[i].cb();
         }
     }
 }
@@ -608,6 +717,7 @@ namespace boot {
         hw.i2cCostUs = envInt("SIM_I2C_US", 0);
         sensors.reset();
         buttons.reset();
+        logo.reset();
         settings.reset();
 
         // SIM_SOUND: "quiet" (default) or "beat[:bpm[:loud]]".
