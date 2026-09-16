@@ -1,0 +1,145 @@
+# Robot PU desktop simulator
+
+Run Robot PU MakeCode programs on a laptop — no robot, no micro:bit — and get a
+servo trace you can assert on and watch in a browser.
+
+Design rationale and staging are in [PLAN.md](PLAN.md).
+
+## Quick start
+
+```sh
+cd tools/simulator
+npm install                 # optional; falls back to npx typescript
+
+# run the moonwalk add-on, pressing A 200ms into the run
+node run.mjs moonwalk-pu --ms 4000 --buttons 200:A
+
+# check invariants
+node check.mjs traces/moonwalk-pu.json
+
+# watch it
+node serve.mjs              # then open http://localhost:8099/
+```
+
+Or in one step: `npm run moonwalk`.
+
+## How it works
+
+The extension touches hardware through a very small seam, so the simulator
+shims **`pins`** and runs the real `robotpu.ts` and `main.ts` **unmodified**:
+
+| Write | Decoded as |
+|---|---|
+| I2C reg `3`–`9` | servos 0–6 |
+| I2C reg `0x10` | servo 7 |
+| I2C reg `0x12` | LED |
+| I2C `0x31` / `0x32` | servo power on / off |
+| `servoWritePin(P14 / P15)` | servos 8 / 9 |
+
+> The simulator never reimplements robot behaviour. Gait logic always comes from
+> the real extension source, and programs are compiled straight from
+> `tutorials/` — there is no second copy to drift.
+
+Everything is concatenated into one global scope with `tsc --outFile`, which is
+how MakeCode builds too. Order: `shim.ts` → `robotpu.ts` → `main.ts` →
+*program* → `driver.ts`.
+
+## Commands
+
+```
+node run.mjs <program> [--ms N] [--seed N] [--sample N] [--buttons 200:A,3000:B] [--out FILE]
+```
+
+`<program>` is a name in `tutorials/` (e.g. `moonwalk-pu`) or a path to a `.ts`.
+
+- `--ms` is the run length **after boot**. Robot PU spends several virtual
+  seconds in `calibrate()` / `start()` before a program's own loop begins; that
+  is excluded, and recorded as `bootMs` in the trace.
+- `--buttons` times are likewise relative to the start of the run.
+
+```
+node check.mjs <trace.json> [--golden FILE] [--bless]
+node serve.mjs [port]
+```
+
+## What it can and cannot tell you
+
+| Question | Answer |
+|---|---|
+| Does the code run, in the right order? | Yes |
+| Angles in range? Trims applied? | Yes |
+| Is the phase timing right? | Yes |
+| Does the pose sequence look right? | Yes, in the viewer |
+| **Does PU actually slide instead of toppling?** | **No** — needs contact physics |
+
+The last row matters for the moonwalk specifically: its correctness lives in
+foot–floor friction, which this does not model. Use the simulator to catch logic
+and timing bugs, then confirm the move on a real floor.
+
+## Fidelity notes
+
+**Virtual time.** `control.millis()` is simulated, and `basic.pause()` advances
+it. Runs are faster than real-time and perfectly repeatable.
+
+**Deterministic RNG.** `Math.random` is a seeded mulberry32; the seed is in the
+trace header. Without this, golden traces could not be compared exactly.
+
+**Concurrency — the one real trade-off.** The program under test runs as the main
+fiber with full loop state. Background tasks from `control.inBackground()` are
+re-run from the top each slice and unwound at their first `basic.pause()`. That
+is exactly equivalent for a poll loop with no loop-carried state, which is what
+the Robot PU background fiber is. A *stateful* background task would be silently
+restarted; the harness records a warning on slice overrun, which is the usual
+symptom.
+
+**Modelled:** servo bus, virtual clock, IMU, sound level, compass, sonar, buttons,
+settings storage.
+**Recorded as events only:** LEDs, audio, radio, serial. Movement first — these
+stub out without crashing, but do not behave.
+
+Sensors are injectable, so a test can tilt the robot or drive the microphone:
+
+```ts
+sensors.accel = { x: 200, y: 0, z: -1000 };   // lean
+sensors.sound = 180;                           // loud
+```
+
+## Viewer
+
+Legs and head only (servos 0–5). Arms are recorded in the trace but not drawn —
+they are optional hardware and the `ServoJoint` enum is unreliable at indices
+7–8 (see PLAN.md §8), so drawing them would imply confidence we do not have.
+
+- **Side view** — hip pitch, i.e. the fore-aft leg swing that makes the gait
+- **Front view** — ankle roll, i.e. the weight shift
+- Strip chart of all six angles, with a playhead
+- Scrub, play/pause, 0.25×–4× speed
+- Drag a trace `.json` onto the page to load it
+
+## Golden traces
+
+Comparison is **exact** — viable because the runtime is fully deterministic and
+the gait code rounds to integer angles.
+
+```sh
+node check.mjs traces/moonwalk-pu.json --bless    # record
+node check.mjs traces/moonwalk-pu.json            # compare
+```
+
+If a golden diff appears unexpectedly, suspect a determinism leak (an unseeded
+random source, or real wall-clock time) before reaching for a tolerance.
+
+## Layout
+
+```
+tools/simulator/
+  run.mjs       build + run a program
+  check.mjs     invariants + golden comparison
+  serve.mjs     static server for the viewer
+  src/
+    shim.ts     MakeCode runtime (enums, clock, scheduler, pins, sensors)
+    driver.ts   runs the sim, emits the trace
+  viewer/       browser viewer
+  traces/       recorded traces; traces/golden/ holds blessed ones
+  built/        compiled bundles (gitignored)
+```

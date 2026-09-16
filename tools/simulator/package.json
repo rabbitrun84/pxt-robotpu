@@ -1,0 +1,16 @@
+{
+  "name": "robotpu-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop simulator and trace viewer for Robot PU MakeCode programs",
+  "//": "No \"type\": \"module\" on purpose. The tools are .mjs (always ESM), while the compiled bundle in built/ is CommonJS and uses require().",
+  "scripts": {
+    "sim": "node run.mjs",
+    "check": "node check.mjs",
+    "view": "node serve.mjs",
+    "moonwalk": "node run.mjs moonwalk-pu --ms 4000 --buttons 200:A && node check.mjs traces/moonwalk-pu.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
