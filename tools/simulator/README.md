@@ -57,10 +57,58 @@ node run.mjs <program> [--ms N] [--seed N] [--sample N] [--buttons 200:A,3000:B]
   is excluded, and recorded as `bootMs` in the trace.
 - `--buttons` times are likewise relative to the start of the run.
 
+- `--sound quiet` (default) or `--sound beat[:bpm[:loud]]` drives the microphone.
+  **Beat-driven programs do nothing without this.** The dance tutorials trigger on
+  `soundLevel() > 140`; the default quiet level is 40, so they run but never move.
+  `--sound beat:120` gives a synthetic 120 BPM envelope.
+
 ```
 node check.mjs <trace.json> [--golden FILE] [--bless]
 node serve.mjs [port]
 ```
+
+### Testing tutorial code
+
+Tutorials keep their code in fenced markdown blocks. `md-extract.mjs` pulls them
+out so they can be run without hand-copying:
+
+```sh
+node md-extract.mjs ../../tutorials/dance-pu.md --list
+node md-extract.mjs ../../tutorials/dance-pu.md --blocks 1,2 --out built/dance-B.ts
+node run.mjs built/dance-B.ts --ms 8000 --sound beat:120 --out traces/dance-B.json
+```
+
+Pick blocks deliberately. A tutorial often splits one program across blocks
+(definitions in one, the loop in another), while other blocks are *alternative*
+programs that redeclare the same names and cannot be combined. In `dance-pu.md`:
+block 0 stands alone, blocks 1+2 go together, block 3 is separate.
+
+### The program suite
+
+`programs.json` records those block groupings and the arguments each program
+needs, so they do not have to be rediscovered:
+
+```sh
+node test-all.mjs           # run everything
+node test-all.mjs motor     # just motorize-pu programs
+```
+
+Covered today: `moonwalk-pu.ts`, `dance-pu.md` (3 programs), `motorize-pu.md`
+(7 programs).
+
+Fields worth knowing:
+
+- `expectMotion: false` marks a snippet that legitimately moves nothing — the raw
+  I2C probes in `motorize-pu.md`. Those skip the "servos actually moved" check
+  rather than failing it.
+- `notRunnable` records blocks that cannot run on their own and why, so nobody
+  wastes time retrying them. In `motorize-pu.md` blocks 6 and 7 are one-line
+  fragments referencing an undefined `t`, meant to be pasted inside a function.
+
+**Top-level motion lands before `bootMs`.** A program whose transitions run at
+top level (`motor-pose`) does all its work before the driver starts, so filtering
+a trace to post-boot rows will make it look static when it is not. Measure the
+whole trace unless you specifically want the loop phase.
 
 ## What it can and cannot tell you
 
@@ -114,7 +162,13 @@ they are optional hardware and the `ServoJoint` enum is unreliable at indices
 - **Front view** — ankle roll, i.e. the weight shift
 - Strip chart of all six angles, with a playhead
 - Scrub, play/pause, 0.25×–4× speed
+- A dropdown lists everything in `traces/` (served by `/api/traces`)
+- Deep link to one with `?trace=dance-B-beat.json`
 - Drag a trace `.json` onto the page to load it
+
+Open it at **http://localhost:8099/** — `/` redirects to `/viewer/`. The trailing
+slash matters: serving the page at `/` would make the browser resolve
+`viewer.js` to `/viewer.js` and 404, leaving a dead page with no JavaScript.
 
 ## Golden traces
 

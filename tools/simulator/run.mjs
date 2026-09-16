@@ -116,6 +116,9 @@ const env = {
     SIM_SEED: opt("seed", "1"),
     SIM_SAMPLE_MS: opt("sample", "10"),
     SIM_BUTTONS: opt("buttons", ""),
+    SIM_SOUND: opt("sound", "quiet"),
+    SIM_I2C_US: opt("i2c-us", "0"),
+    SIM_SKIP_BOOT: argv.includes("--skip-boot") ? "1" : "",
     SIM_PROGRAM: label,
     SIM_OUT: outPath,
 };

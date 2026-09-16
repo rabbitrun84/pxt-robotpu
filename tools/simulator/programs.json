@@ -1,0 +1,200 @@
+{
+  "//": "Runnable programs extracted from tutorial markdown. 'blocks' selects which fenced typescript blocks to concatenate \u2014 tutorials often split one program across blocks, while other blocks are alternatives that redeclare the same names and cannot be combined. Run them all with: node test-all.mjs",
+  "programs": [
+    {
+      "name": "moonwalk",
+      "file": "../../tutorials/moonwalk-pu.ts",
+      "args": [
+        "--ms",
+        "8000",
+        "--buttons",
+        "200:A"
+      ],
+      "expectMotion": true,
+      "note": "standalone add-on, not extracted from markdown"
+    },
+    {
+      "name": "dance-builtin",
+      "md": "../../tutorials/dance-pu.md",
+      "blocks": [
+        0
+      ],
+      "args": [
+        "--ms",
+        "8000",
+        "--sound",
+        "beat:120"
+      ],
+      "expectMotion": true,
+      "note": "Part 1 \u2014 built-in robotPuPro.dance()"
+    },
+    {
+      "name": "dance-beatsync",
+      "md": "../../tutorials/dance-pu.md",
+      "blocks": [
+        1,
+        2
+      ],
+      "args": [
+        "--ms",
+        "8000",
+        "--sound",
+        "beat:120"
+      ],
+      "expectMotion": true,
+      "note": "Parts 3+4 \u2014 block 2 needs block 1's setPose/gaits. Static without --sound."
+    },
+    {
+      "name": "dance-qlearn",
+      "md": "../../tutorials/dance-pu.md",
+      "blocks": [
+        3
+      ],
+      "args": [
+        "--ms",
+        "8000",
+        "--sound",
+        "beat:120"
+      ],
+      "expectMotion": true,
+      "note": "Part 6 \u2014 self-contained; redeclares names from blocks 1-2, cannot combine"
+    },
+    {
+      "name": "motor-pose",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        8
+      ],
+      "args": [
+        "--ms",
+        "4000"
+      ],
+      "expectMotion": true,
+      "note": "pose helpers + easing; block 8 transitions at top level, so motion lands before bootMs"
+    },
+    {
+      "name": "motor-bow",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        10
+      ],
+      "args": [
+        "--ms",
+        "6000",
+        "--buttons",
+        "500:A"
+      ],
+      "expectMotion": true,
+      "note": "doBow() on button A; needs blocks 0-5 for transitionPose"
+    },
+    {
+      "name": "motor-remote",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        11
+      ],
+      "args": [
+        "--ms",
+        "6000"
+      ],
+      "expectMotion": true,
+      "note": "runStringCommand / runKeyValueCommand demo"
+    },
+    {
+      "name": "motor-step-a",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        14
+      ],
+      "args": [
+        "--ms",
+        "6000"
+      ],
+      "expectMotion": true,
+      "note": "servoStepStatus convergence loop"
+    },
+    {
+      "name": "motor-step-b",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        15
+      ],
+      "args": [
+        "--ms",
+        "6000"
+      ],
+      "expectMotion": true,
+      "note": "servoStepStatus variant; redeclares block 14's names"
+    },
+    {
+      "name": "motor-i2c-read",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        12
+      ],
+      "args": [
+        "--ms",
+        "2000"
+      ],
+      "expectMotion": false,
+      "note": "raw bus probe \u2014 selects a register and reads it back; moves nothing"
+    },
+    {
+      "name": "motor-i2c-write",
+      "md": "../../tutorials/motorize-pu.md",
+      "blocks": [
+        13
+      ],
+      "args": [
+        "--ms",
+        "2000"
+      ],
+      "expectMotion": false,
+      "note": "raw bus ACK probe; moves nothing"
+    },
+    {
+      "name": "yoga-routine",
+      "file": "programs/yoga-routine.ts",
+      "args": [
+        "--ms",
+        "6000",
+        "--i2c-us",
+        "400"
+      ],
+      "expectMotion": true,
+      "note": "Stand/Jump/Yoga sequence. Adapted from the beginner `robotPu` namespace to `robotPuPro`. NEEDS --i2c-us: its while-loops drive servos with no basic.pause(), so at zero bus cost the whole motion collapses into one instant."
+    },
+    {
+      "name": "yoga-sequence",
+      "file": "programs/yoga-sequence.ts",
+      "args": [
+        "--ms",
+        "12000",
+        "--i2c-us",
+        "400",
+        "--skip-boot"
+      ],
+      "expectMotion": true,
+      "note": "Stand/Jump/Yoga/Yoga2/Yoga3 run ONCE. Needs --i2c-us (while-loops have no basic.pause). --skip-boot is a no-op here: the first servo() call is inside forever(), so ensureRobot()'s ~3.5s calibrate+start lands in the run window, not before it."
+    }
+  ],
+  "notRunnable": {
+    "../../tutorials/motorize-pu.md": {
+      "6": "one-line fragment: `const te = easeInOutSmoothStep(t)` \u2014 references an undefined t; meant to be pasted inside a function body",
+      "7": "same, cosine variant; conflicts with block 6",
+      "9": "duplicate of block 8 with different step counts"
+    }
+  }
+}

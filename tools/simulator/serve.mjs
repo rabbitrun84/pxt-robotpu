@@ -9,7 +9,7 @@
  */
 
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,22 @@ createServer(async (req, res) => {
     return;
   }
   if (rel.endsWith("/")) rel += "index.html";
+
+  // Let the viewer discover which traces exist, so switching between runs does
+  // not mean hunting through the filesystem.
+  if (rel === "/api/traces") {
+    try {
+      const names = (await readdir(join(HERE, "traces"), { withFileTypes: true }))
+        .filter((d) => d.isFile() && d.name.endsWith(".json"))
+        .map((d) => d.name)
+        .sort();
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      res.end(JSON.stringify(names));
+    } catch {
+      res.writeHead(200, { "content-type": "application/json" }).end("[]");
+    }
+    return;
+  }
 
   // Keep the server inside tools/simulator.
   const path = resolve(join(HERE, normalize(rel)));

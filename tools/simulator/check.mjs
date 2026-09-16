@@ -70,8 +70,14 @@ check("no scheduler warnings", (trace.warnings || []).length === 0,
 
 check("timestamps are monotonic", rows.every((r, i) => i === 0 || r[0] >= rows[i - 1][0]));
 
+// Some tutorial snippets legitimately move nothing (raw I2C probes, for
+// instance). Scoring those as failures would train people to ignore the check.
 const moved = rows.some(r => r.slice(1, 11).some((v, i) => v !== rows[0][i + 1]));
-check("servos actually moved", moved, moved ? "" : "trace is static — did the program run?");
+if (argv.includes("--no-motion-expected")) {
+    console.log(`  SKIP  servos actually moved — non-motion program${moved ? " (but it did move)" : ""}`);
+} else {
+    check("servos actually moved", moved, moved ? "" : "trace is static — did the program run?");
+}
 
 // ---------------------------------------------------------------------------
 // Gait invariants — only for programs that declare a phase pose table

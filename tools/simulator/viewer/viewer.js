@@ -26,11 +26,36 @@ const rad = (d) => (d * Math.PI) / 180;
 // Load
 // ---------------------------------------------------------------------------
 
+async function fetchTrace(name) {
+  const res = await fetch(`../traces/${name}`);
+  if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+  load(await res.json());
+}
+
 async function boot() {
+  // Populate the picker from whatever is in traces/, so new runs show up on reload.
+  let names = [];
   try {
-    const res = await fetch("../traces/moonwalk-pu.json");
-    if (res.ok) return load(await res.json());
-  } catch (e) { /* served from file:// or no default trace */ }
+    const res = await fetch("../api/traces");
+    if (res.ok) names = await res.json();
+  } catch (e) { /* file:// — fall back to drag-and-drop */ }
+
+  const sel = $("trace");
+  if (names.length) {
+    sel.innerHTML = names.map((n) => `<option value="${n}">${n.replace(/\.json$/, "")}</option>`).join("");
+    // ?trace=dance-B-beat.json selects a specific one.
+    const want = new URLSearchParams(location.search).get("trace");
+    const pick = names.includes(want) ? want
+      : names.includes(`${want}.json`) ? `${want}.json`
+      : names.includes("moonwalk-pu.json") ? "moonwalk-pu.json"
+      : names[0];
+    sel.value = pick;
+    sel.onchange = () => fetchTrace(sel.value).catch((e) => ($("hdr").textContent = e.message));
+    try { return await fetchTrace(pick); }
+    catch (e) { $("hdr").textContent = e.message; return; }
+  }
+
+  sel.style.display = "none";
   $("hdr").textContent = "no trace loaded — open or drop a trace .json";
 }
 
@@ -80,10 +105,15 @@ function drawSide(r) {
   const hipY = gy - L, hipX = cx;
 
   // Legs. Angle is measured from vertical; positive swings forward (screen right).
-  for (const [servo, color] of [[1, COLORS[0]], [3, COLORS[2]]]) {
+  //
+  // The two legs are drawn with a small lateral offset. Without it, any pose
+  // where both legs share an angle (Stand, Jump, Yoga all have LL=RL=90) draws
+  // them exactly on top of each other and the robot appears to have one leg.
+  for (const [servo, color, ox] of [[1, COLORS[0], -8], [3, COLORS[2], 8]]) {
     const a = rad(r[1 + servo] - 90);
-    const fx = hipX + L * Math.sin(a), fy = hipY + L * Math.cos(a);
-    limb(x, hipX, hipY, fx, fy, color, 7);
+    const hx = hipX + ox;
+    const fx = hx + L * Math.sin(a), fy = hipY + L * Math.cos(a);
+    limb(x, hx, hipY, fx, fy, color, 7);
     // Foot: ankle roll is a frontal motion, so from the side just show a flat plate.
     limb(x, fx - 11, fy, fx + 13, fy, color, 5);
   }
@@ -104,29 +134,70 @@ function drawSide(r) {
   x.fillText("forward →", c.width - 86, 18);
 }
 
-/** Front view: the feet servos are ankle roll, i.e. the weight shift. */
+/** A foot plate resting on the ground, rolled by its ankle servo. */
+function footPlate(x, fx, gy, ang, color) {
+  const w = 15;
+  const dx = w * Math.cos(ang), dy = w * Math.sin(ang);
+  limb(x, fx - dx, gy - dy, fx + dx, gy + dy, color, 5);
+}
+
+/**
+ * Front view: ankle roll, drawn PER LEG.
+ *
+ * Earlier this averaged the two foot servos into one body lean. That works for
+ * gaits where the ankles move together (the moonwalk), but it erases poses
+ * built from a differential — Jump is LF 100 / RF 45, a 55° split that averages
+ * to a bland -17.5° and rendered almost identically to standing.
+ *
+ * Each ankle is now independent: rolling a foot onto its edge shortens that
+ * leg's effective height (L·cos) and shifts it sideways (L·sin), so an
+ * asymmetric pose visibly drops one hip.
+ */
 function drawFront(r) {
   const { c, x } = ctxOf("front");
   const gy = c.height - 46, cx = c.width / 2;
   const L = 74;
   ground(x, c, gy);
 
-  // Both foot servos move together; their mean is the body lean.
-  const lean = rad(((r[1] + r[3]) / 2) - 90);
-  const hipY = gy - L;
-  const dx = Math.sin(lean) * L * 0.55;
+  const la = rad(r[1] - 90);   // LeftFoot ankle roll
+  const ra = rad(r[3] - 90);   // RightFoot ankle roll
+  const roll = (la + ra) / 2;  // body roll = common-mode ankle
+  const HW = 32;               // half hip width, rigid
 
-  const lx = cx - 26, rx = cx + 26;
-  limb(x, lx + dx, hipY, lx, gy, COLORS[0], 7);
-  limb(x, rx + dx, hipY, rx, gy, COLORS[2], 7);
-  limb(x, lx + dx, hipY, rx + dx, hipY, "#6b7484", 11);
+  // The hip bar is rigid and rotates with the body; each leg then points along
+  // its OWN ankle angle. Poses like Jump (LF 100 / RF 45) are kinematically
+  // over-constrained — with both feet flat the hips could not stay a fixed
+  // distance apart — so pinning the feet to the ground and solving for the hips
+  // produced a broken-looking figure. Hanging the legs off a rigid body instead
+  // always draws something coherent, and the ankle split stays plainly visible.
+  const hcy = gy - L;
+  let hlx = cx - HW * Math.cos(roll), hly = hcy - HW * Math.sin(roll);
+  let hrx = cx + HW * Math.cos(roll), hry = hcy + HW * Math.sin(roll);
 
+  let flx = hlx + L * Math.sin(la), fly = hly + L * Math.cos(la);
+  let frx = hrx + L * Math.sin(ra), fry = hry + L * Math.cos(ra);
+
+  // Settle the figure so whichever foot is lowest rests on the ground.
+  const dy = gy - Math.max(fly, fry);
+  hly += dy; hry += dy; fly += dy; fry += dy;
+
+  limb(x, hlx, hly, flx, fly, COLORS[0], 7);
+  limb(x, hrx, hry, frx, fry, COLORS[2], 7);
+  footPlate(x, flx, fly, la, COLORS[0]);
+  footPlate(x, frx, fry, ra, COLORS[2]);
+  limb(x, hlx, hly, hrx, hry, "#6b7484", 11);
+
+  const mhx = (hlx + hrx) / 2, mhy = (hly + hry) / 2;
   x.fillStyle = COLORS[4];
-  x.beginPath(); x.arc(cx + dx * 1.6, hipY - 40, 15, 0, Math.PI * 2); x.fill();
+  x.beginPath();
+  x.arc(mhx + 34 * Math.sin(roll), mhy - 34 * Math.cos(roll), 15, 0, Math.PI * 2);
+  x.fill();
 
-  const side = ((r[1] + r[3]) / 2) > 90 ? "weight: RIGHT" : "weight: LEFT";
+  const diff = r[1] - r[3];
   x.fillStyle = "#8b93a3"; x.font = "11px ui-monospace, monospace";
-  x.fillText(side, 12, 18);
+  x.fillText(`ankles ${r[1]}° / ${r[3]}°`, 12, 18);
+  x.fillStyle = Math.abs(diff) >= 25 ? "#ff8a3d" : "#8b93a3";
+  x.fillText(`split ${diff > 0 ? "+" : ""}${diff}°`, 12, 33);
 }
 
 function drawChart() {

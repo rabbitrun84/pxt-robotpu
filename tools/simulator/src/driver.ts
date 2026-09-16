@@ -87,6 +87,15 @@ namespace driver {
             foreverTasks: sim.foreverCount()
         };
 
+        // --skip-boot drops the calibrate()/start() phase so the trace contains
+        // only what the program itself did. Boot is several seconds of servo
+        // motion that has nothing to do with the routine under test.
+        if (env("SIM_SKIP_BOOT", "") === "1") {
+            const kept = hw.trace.filter(function (r) { return r[0] >= bootMs; });
+            trace.rows = kept;
+            (trace as any).bootTrimmed = true;
+        }
+
         const json = JSON.stringify(trace);
         if (outPath) {
             const fs = require("fs");

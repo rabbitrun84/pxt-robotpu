@@ -133,6 +133,23 @@ namespace sim {
 
     export function foreverCount(): number { return foreverTasks.length; }
 
+    let usAccum = 0;
+
+    /**
+     * Advance virtual time by a sub-millisecond amount, for hardware
+     * transaction cost (see hw.i2cCostUs).
+     *
+     * Deliberately does NOT service background tasks: this is called from
+     * inside a bus write, and re-entering the scheduler there would let a
+     * background fiber run in the middle of another fiber's I2C transaction.
+     */
+    export function advanceMicros(us: number): void {
+        if (us <= 0) return;
+        usAccum += us;
+        while (usAccum >= 1000) { usAccum -= 1000; now += 1; }
+        hw.sample(now);
+    }
+
     /** Called by basic.pause(). Advances virtual time and services background tasks. */
     export function pause(ms: number): void {
         if (inBackground) {
@@ -227,6 +244,16 @@ namespace hw {
     export let trace: number[][] = [];     // [t, s0..s9]
     let lastSample = -1;
 
+    /**
+     * Virtual cost of one bus transaction, in microseconds. Default 0.
+     *
+     * Zero keeps existing golden traces valid, but it makes any tight loop that
+     * drives servos without basic.pause() collapse into a single instant -
+     * see the while-loops in programs/yoga-routine.ts. Set --i2c-us 400 for a
+     * rough 100kHz-bus approximation when timing such a loop matters.
+     */
+    export let i2cCostUs = 0;
+
     export function reset(): void {
         servo = [];
         for (let i = 0; i < SERVO_COUNT; i++) servo.push(90);
@@ -236,6 +263,7 @@ namespace hw {
         events = [];
         trace = [];
         lastSample = -1;
+        selectedReg = -1;
     }
 
     export function setServo(idx: number, angle: number): void {
@@ -264,6 +292,16 @@ namespace hw {
      *   reg 0x12  -> LED / light
      *   0x31/0x32 -> servo power on/off
      */
+    /** Register selected by a bare i2cWriteNumber(), for a following read. */
+    export let selectedReg = -1;
+
+    /** Map a bus register back to a servo index, or -1. Inverse of pcb.servo(). */
+    export function regToServo(reg: number): number {
+        if (reg >= 3 && reg <= 9) return reg - 3;
+        if (reg === 0x10) return 7;
+        return -1;
+    }
+
     export function i2cWrite(buf: Buffer): void {
         const reg = buf.data[0];
         const val = buf.data[1];
@@ -293,19 +331,46 @@ namespace hw {
 namespace sensors {
     // Upright at rest: ~1g on -Z, in milli-g as MakeCode reports.
     export let accel = { x: 0, y: 0, z: -1024 };
-    export let sound = 40;
     export let heading = 0;
     export let temperature = 22;
     export let gesture: Gesture | -1 = -1;
     export let sonarCm = 100;
 
+    // --- Microphone ------------------------------------------------------
+    //
+    // A constant sound level silently defeats every beat-driven program: the
+    // dance tutorials trigger on soundLevel() > 140, so a flat 40 means they
+    // run but never move. The synthetic beat below is a plain numeric envelope
+    // (a spike at each beat, quiet in between) so that code path can be tested.
+
+    export let soundMode = "quiet";     // "quiet" | "beat"
+    export let soundQuiet = 40;
+    export let soundLoud = 200;
+    export let bpm = 120;
+    export let beatWidthMs = 70;
+
     export function reset(): void {
         accel = { x: 0, y: 0, z: -1024 };
-        sound = 40;
         heading = 0;
         temperature = 22;
         gesture = -1;
         sonarCm = 100;
+        soundMode = "quiet";
+        soundQuiet = 40;
+        soundLoud = 200;
+        bpm = 120;
+        beatWidthMs = 70;
+    }
+
+    /** Sound level at a given virtual time. */
+    export function soundAt(t: number): number {
+        if (soundMode !== "beat") return soundQuiet;
+        const period = 60000 / Math.max(1, bpm);
+        const phase = t % period;
+        if (phase >= beatWidthMs) return soundQuiet;
+        // Sharp attack, quick decay - enough shape for a threshold detector.
+        const k = 1 - phase / beatWidthMs;
+        return Math.round(soundQuiet + (soundLoud - soundQuiet) * k);
     }
 }
 
@@ -340,7 +405,7 @@ namespace input {
         const a = sensors.accel;
         return Math.round(Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z));
     }
-    export function soundLevel(): number { return sensors.sound; }
+    export function soundLevel(): number { return sensors.soundAt(sim.now); }
     export function compassHeading(): number { return sensors.heading; }
     export function temperature(): number { return sensors.temperature; }
     export function isGesture(g: Gesture): boolean { return sensors.gesture === g; }
@@ -367,13 +432,30 @@ namespace pins {
     export function createBuffer(size: number): Buffer { return new Buffer(size); }
     export function i2cWriteBuffer(_addr: number, buf: Buffer, _repeat?: boolean): void {
         hw.i2cWrite(buf);
+        sim.advanceMicros(hw.i2cCostUs);
     }
     export function i2cReadBuffer(_addr: number, size: number, _repeat?: boolean): Buffer {
         return new Buffer(size);
     }
+    /**
+     * Single-number I2C access, as used by the raw-bus examples in
+     * motorize-pu.md. A lone write selects a register; the following read
+     * returns that register's value, so `write(reg 0x03); read()` gives back
+     * servo 0's angle rather than a meaningless constant.
+     */
+    export function i2cWriteNumber(_addr: number, value: number, _fmt?: NumberFormat, _repeat?: boolean): void {
+        hw.selectedReg = value & 0xff;
+        hw.logEvent("i2cSelect", "0x" + (value & 0xff).toString(16));
+        sim.advanceMicros(hw.i2cCostUs);
+    }
+    export function i2cReadNumber(_addr: number, _fmt?: NumberFormat, _repeat?: boolean): number {
+        const idx = hw.regToServo(hw.selectedReg);
+        return idx >= 0 ? hw.servo[idx] : 0;
+    }
     export function servoWritePin(pin: AnalogPin, value: number): void {
         if (pin === AnalogPin.P14) hw.setServo(8, value);
         else if (pin === AnalogPin.P15) hw.setServo(9, value);
+        sim.advanceMicros(hw.i2cCostUs);
     }
     export function analogWritePin(_pin: AnalogPin, _value: number): void { /* no-op */ }
     export function digitalWritePin(_pin: DigitalPin, _value: number): void { /* no-op */ }
@@ -512,15 +594,31 @@ namespace boot {
 
     export let seedUsed = 1;
 
+    function envStr(name: string, dflt: string): string {
+        if (typeof process === "undefined" || !process.env || !process.env[name]) return dflt;
+        return process.env[name];
+    }
+
     export function init(): void {
         seedUsed = envInt("SIM_SEED", 1);
         rng.seed(seedUsed);
         sim.reset();
         hw.reset();
         hw.sampleMs = envInt("SIM_SAMPLE_MS", 10);
+        hw.i2cCostUs = envInt("SIM_I2C_US", 0);
         sensors.reset();
         buttons.reset();
         settings.reset();
+
+        // SIM_SOUND: "quiet" (default) or "beat[:bpm[:loud]]".
+        // Applied here, before the program's top level, so even boot-time code
+        // sees a consistent microphone.
+        const spec = envStr("SIM_SOUND", "quiet").split(":");
+        if (spec[0] === "beat") {
+            sensors.soundMode = "beat";
+            if (spec.length > 1 && !isNaN(parseInt(spec[1], 10))) sensors.bpm = parseInt(spec[1], 10);
+            if (spec.length > 2 && !isNaN(parseInt(spec[2], 10))) sensors.soundLoud = parseInt(spec[2], 10);
+        }
     }
 }
 
