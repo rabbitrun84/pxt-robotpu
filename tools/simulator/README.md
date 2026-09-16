@@ -170,6 +170,48 @@ Open it at **http://localhost:8099/** — `/` redirects to `/viewer/`. The trail
 slash matters: serving the page at `/` would make the browser resolve
 `viewer.js` to `/viewer.js` and 404, leaving a dead page with no JavaScript.
 
+## Writing code in the browser
+
+Press **`</> code`** in the header for an editor. Type a program, press
+**Build & Run** (or Cmd/Ctrl+Enter) and the resulting trace loads straight into
+the playback panels. Typical round trip is **~100 ms**.
+
+- **load example…** pulls the real source of any `file:` program in
+  `programs.json`, along with its arguments
+- Run options mirror the CLI flags: duration, `--sound`, `--buttons`,
+  `--i2c-us`, `--skip-boot`
+- The buffer persists in `localStorage`
+
+### How it stays fast
+
+The extension is compiled **once** into `built/_prelude.js`
+(shim + robotpu + main) and `built/_postlude.js` (driver), cached with an mtime
+check against the sources — edit `robotpu.ts` and they rebuild. Each run only
+transpiles the user's code with the TypeScript compiler API held in memory, then
+concatenates prelude + user + postlude.
+
+This is the same split `tsc --outFile` already does, and it was verified to
+produce traces **byte-identical** to the monolithic build. Going through the
+`npx tsc` CLI instead costs ~1.3 s per run, almost all of it process startup.
+
+### Safety
+
+`/api/run` executes arbitrary code with your user's privileges. Two consequences:
+
+- **The server binds `127.0.0.1` only.** Do not change this to `0.0.0.0` — on a
+  shared network it would be remote code execution on your machine.
+- **User code runs in a child process with a 15 s timeout**, then `SIGKILL`. A
+  `while (true) {}` with no `basic.pause()` cannot wedge the server; it comes
+  back as a normal error explaining that the loop never yields.
+
+Syntax errors fail the build rather than running — `transpileModule` emits even
+for malformed input, so without that check a broken program would quietly
+produce a degenerate trace and report success.
+
+Code using the beginner 6-DOF `robotPu` namespace is detected and flagged, since
+it would otherwise fail with a bare `ReferenceError`. It is reported, never
+silently rewritten: it is a genuine incompatibility, not a typo.
+
 ## Golden traces
 
 Comparison is **exact** — viable because the runtime is fully deterministic and

@@ -277,5 +277,127 @@ document.addEventListener("drop", async (e) => {
   if (f) load(JSON.parse(await f.text()));
 });
 
+// ---------------------------------------------------------------------------
+// Code editor — build & run
+// ---------------------------------------------------------------------------
+
+const STORE_KEY = "robotpu.editor.code";
+
+function problems(text, kind) {
+  const el = $("problems");
+  if (!text) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = kind || "";
+  el.textContent = text;
+}
+
+/** Map a programs.json args array onto the option inputs. */
+function applyArgs(args) {
+  const get = (n) => { const i = args.indexOf("--" + n); return i >= 0 ? args[i + 1] : null; };
+  $("optMs").value = get("ms") || 8000;
+  $("optSound").value = get("sound") || "quiet";
+  $("optButtons").value = get("buttons") || "";
+  $("optI2c").value = get("i2c-us") || 0;
+  $("optSkipBoot").checked = args.includes("--skip-boot");
+}
+
+function currentOpts(name) {
+  return {
+    name: name || "editor",
+    ms: parseInt($("optMs").value, 10) || 8000,
+    sound: $("optSound").value,
+    buttons: $("optButtons").value.trim(),
+    i2cUs: parseInt($("optI2c").value, 10) || 0,
+    skipBoot: $("optSkipBoot").checked,
+  };
+}
+
+async function buildAndRun() {
+  const code = $("code").value;
+  if (!code.trim()) { problems("Nothing to run — the editor is empty.", ""); return; }
+
+  localStorage.setItem(STORE_KEY, code);
+  $("runBtn").disabled = true;
+  $("runStatus").textContent = "building…";
+  problems("");
+
+  try {
+    const res = await fetch("../api/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code, opts: currentOpts() }),
+    });
+    const r = await res.json();
+
+    const diag = (r.diagnostics || []).map((d) => `  line ${d.line}:${d.column}  ${d.message}`).join("\n");
+
+    if (!r.ok) {
+      problems([r.error, diag && "Compiler messages:\n" + diag, r.warning].filter(Boolean).join("\n\n"), "");
+      $("runStatus").textContent = "failed";
+      return;
+    }
+
+    load(r.trace);
+    $("trace").value = "";   // showing an editor run, not a file on disk
+
+    const rows = r.trace.rows.length;
+    const notes = [];
+    if (r.warning) notes.push(r.warning);
+    if (diag) notes.push("Compiler messages (non-fatal):\n" + diag);
+    problems(notes.length ? notes.join("\n\n") : `Ran in ${r.elapsedMs} ms — ${rows} samples.`,
+             notes.length ? "warn" : "ok");
+    $("runStatus").textContent = `${rows} samples in ${r.elapsedMs} ms`;
+  } catch (e) {
+    problems("Could not reach the build service: " + e.message +
+             "\nIs serve.mjs still running?", "");
+    $("runStatus").textContent = "error";
+  } finally {
+    $("runBtn").disabled = false;
+  }
+}
+
+async function initEditor() {
+  const saved = localStorage.getItem(STORE_KEY);
+  if (saved) $("code").value = saved;
+
+  $("toggleCode").onclick = () => {
+    const p = $("codePanel");
+    p.hidden = !p.hidden;
+    if (!p.hidden) $("code").focus();
+  };
+  $("runBtn").onclick = buildAndRun;
+
+  // Ctrl/Cmd+Enter runs, the way every code playground does.
+  $("code").addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); buildAndRun(); }
+    // Tab should indent, not move focus out of the editor.
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const el = e.target, s = el.selectionStart;
+      el.value = el.value.slice(0, s) + "    " + el.value.slice(el.selectionEnd);
+      el.selectionStart = el.selectionEnd = s + 4;
+    }
+  });
+
+  try {
+    const examples = await (await fetch("../api/examples")).json();
+    const sel = $("example");
+    for (const ex of examples) {
+      const o = document.createElement("option");
+      o.value = ex.name; o.textContent = ex.name; o.title = ex.note;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => {
+      const ex = examples.find((x) => x.name === sel.value);
+      if (!ex) return;
+      $("code").value = ex.code;
+      applyArgs(ex.args || []);
+      localStorage.setItem(STORE_KEY, ex.code);
+      problems(ex.note || "", "warn");
+    };
+  } catch (e) { /* examples are optional */ }
+}
+
 requestAnimationFrame(tick);
+initEditor();
 boot();
