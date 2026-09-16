@@ -104,6 +104,7 @@ mindmap
       PID balancing
       Advanced balancing
     Fun Projects
+      Moonwalk backslide
       Kungfu pose sequence
       Learn to skate
 ```
@@ -184,6 +185,7 @@ Teachers can cherry-pick from the pool using these age/grade bands. The level is
 - **How PU moves**: [motorize-pu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/motorize-pu.md)
 - **Robot actions**: [action-pu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/action-pu.md)
 - **Dance choreography**: [dance-pu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/dance-pu.md)
+- **Moonwalk (backslide)**: [moonwalk-pu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/moonwalk-pu.md)
 - **Music + beat-driven behaviors**: [music-pu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/music-pu.md)
 - **Remote control**: [remote-control.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/remote-control.md)
 - **Gamepad patterns**: [gamepad.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/gamepad.md)
@@ -295,6 +297,7 @@ Difficulty legend: ⭐ = Beginner (8-10), ⭐⭐ = Intermediate (11-13), ⭐⭐�
 
 ### Fun projects
 
+- **Moonwalk (backslide)** ⭐: [moonwalk-pu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/moonwalk-pu.md)
 - **Kungfu pose sequence** ⭐⭐: [kungfu.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/kungfu.md)
 - **Learn to skate** ⭐⭐⭐: [learn-skate.md](https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/learn-skate.md)
 
@@ -392,6 +395,7 @@ Every `.md` file in this folder is listed below with a GitHub URL.
 - **local-planner-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/local-planner-pu.md
 - **maze-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/maze-pu.md
 - **missions-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/missions-pu.md
+- **moonwalk-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/moonwalk-pu.md
 - **motorize-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/motorize-pu.md
 - **music-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/music-pu.md
 - **musiclib-pu.md**: https://github.com/robotgyms/pxt-robotpu/blob/main/tutorials/musiclib-pu.md
