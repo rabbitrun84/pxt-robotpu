@@ -213,11 +213,19 @@ function drawFront(r) {
   x.fillText(`split ${diff > 0 ? "+" : ""}${diff}°`, 12, 33);
 }
 
+// Wave shapes, by the WaveShape enum order.
+const WAVE = ["Sine", "Sawtooth", "Triangle", "Square", "Noise"];
+const WAVE_COLOR = ["#4ec9a8", "#d8a24e", "#c94ec9", "#4ec9c9", "#8a8f99"];
+
 function drawChart() {
   const { c, x } = ctxOf("chart");
   if (!rows.length) return;
-  const pad = 4, h = c.height - pad * 2;
+
+  const sounds = (trace && trace.sounds) || [];
+  const lane = sounds.length ? 16 : 0;          // reserve a strip for audio
+  const pad = 4, h = c.height - pad * 2 - lane;
   const n = rows.length;
+
   for (let j = 0; j < 6; j++) {
     x.strokeStyle = COLORS[j]; x.lineWidth = 1.2; x.beginPath();
     for (let i = 0; i < n; i++) {
@@ -227,6 +235,28 @@ function drawChart() {
     }
     x.stroke();
   }
+
+  if (!lane) return;
+
+  // Audio lane, on the same time axis as the traces above it. Sound is not
+  // synthesised — these are the play() calls and how long each occupied the
+  // micro:bit's single background channel.
+  const t0 = rows[0][0], t1 = rows[n - 1][0];
+  const span = Math.max(1, t1 - t0);
+  const toX = (t) => ((t - t0) / span) * c.width;
+  const y = c.height - lane + 3;
+
+  x.fillStyle = "#1c1f26";
+  x.fillRect(0, y - 2, c.width, lane - 1);
+  for (const s of sounds) {
+    const x0 = toX(s.t), x1 = toX(s.endT);
+    if (x1 < 0 || x0 > c.width) continue;
+    x.fillStyle = WAVE_COLOR[s.wave] || "#8a8f99";
+    x.fillRect(x0, y, Math.max(1.5, x1 - x0), lane - 7);
+  }
+  x.fillStyle = "#8b93a3";
+  x.font = "9px ui-monospace, monospace";
+  x.fillText("audio", 3, c.height - 1);
 }
 
 function drawPlayhead() {
@@ -239,10 +269,25 @@ function drawPlayhead() {
 }
 
 function readout(r) {
-  $("readout").innerHTML = JOINTS.map(
+  let html = JOINTS.map(
     (j) => `<tr><td><span class="sw" style="background:${COLORS[j.i]}"></span>${j.short}</td>
             <td style="color:var(--dim)">${j.name}</td><td class="v">${r[1 + j.i]}°</td></tr>`
   ).join("");
+
+  // Whatever the speaker is doing at this instant.
+  const sounds = (trace && trace.sounds) || [];
+  if (sounds.length) {
+    const now = r[0];
+    const s = sounds.find((z) => now >= z.t && now < z.endT);
+    const label = s
+      ? `${WAVE[s.wave] || "?"} ${s.freq0}${s.freq1 !== s.freq0 ? "→" + s.freq1 : ""}Hz`
+      : "—";
+    const colour = s ? WAVE_COLOR[s.wave] || "#8a8f99" : "#39404d";
+    html += `<tr><td style="padding-top:8px"><span class="sw" style="background:${colour}"></span>♪</td>
+             <td style="color:var(--dim);padding-top:8px">audio</td>
+             <td class="v" style="padding-top:8px">${label}</td></tr>`;
+  }
+  $("readout").innerHTML = html;
 }
 
 function render() {
@@ -252,6 +297,103 @@ function render() {
   const t0 = rows[0][0];
   $("clock").textContent = `${((r[0] - t0) / 1000).toFixed(2)}s  (t=${r[0]})`;
   $("scrub").value = idx;
+}
+
+// ---------------------------------------------------------------------------
+// Audio playback
+// ---------------------------------------------------------------------------
+//
+// The simulator records what the speaker was asked to play; this synthesises it
+// so you can actually hear the program. It is a reconstruction from the
+// recorded parameters (wave, frequency sweep, volume envelope, effect), not a
+// capture — close enough to judge timing and character, not a reference for
+// exactly how the micro:bit's speaker sounds.
+
+let audioCtx = null, soundOn = false, noiseBuf = null;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+/** One second of white noise, reused for every Noise sound. */
+function getNoise(ctx) {
+  if (noiseBuf) return noiseBuf;
+  const n = ctx.sampleRate;
+  noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+
+const OSC_TYPE = ["sine", "sawtooth", "triangle", "square"];
+
+function playSound(s, speed) {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+
+  // Compress the duration by the playback rate so audio stays lined up with
+  // the visuals. Pitch is left alone — shifting it too would make a 4x replay
+  // unrecognisable.
+  const dur = Math.max(0.02, s.ms / 1000 / speed);
+  const t0 = ctx.currentTime + 0.01;
+  const t1 = t0 + dur;
+
+  // 0-255 from the program, scaled well down: these are square waves and noise,
+  // which are harsh at full amplitude.
+  const amp = (v) => Math.max(0.0005, ((v == null ? 255 : v) / 255) * 0.18);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(amp(s.vol0), t0);
+  gain.gain.linearRampToValueAtTime(amp(s.vol1), t1);
+  gain.connect(ctx.destination);
+
+  let src;
+  const lfos = [];
+  if (s.wave === 4) {
+    src = ctx.createBufferSource();
+    src.buffer = getNoise(ctx);
+    src.loop = true;
+  } else {
+    src = ctx.createOscillator();
+    src.type = OSC_TYPE[s.wave] || "square";
+    src.frequency.setValueAtTime(s.freq0, t0);
+    if (s.freq1 !== s.freq0) src.frequency.linearRampToValueAtTime(s.freq1, t1);
+
+    // Vibrato / Warble modulate pitch; Tremolo modulates level.
+    if (s.effect === 1 || s.effect === 3) {
+      const lfo = ctx.createOscillator(), depth = ctx.createGain();
+      lfo.frequency.value = s.effect === 3 ? 18 : 6;
+      depth.gain.value = s.effect === 3 ? Math.max(30, s.freq0 * 0.12) : 10;
+      lfo.connect(depth); depth.connect(src.frequency);
+      lfos.push(lfo);
+    }
+  }
+  if (s.effect === 2) {
+    const lfo = ctx.createOscillator(), depth = ctx.createGain();
+    lfo.frequency.value = 11;
+    depth.gain.value = 0.06;
+    lfo.connect(depth); depth.connect(gain.gain);
+    lfos.push(lfo);
+  }
+
+  src.connect(gain);
+  src.start(t0); src.stop(t1);
+  for (const l of lfos) { l.start(t0); l.stop(t1); }
+}
+
+/** Fire any sound whose start falls in (fromT, toT]. */
+function playSoundsBetween(fromT, toT) {
+  if (!soundOn || !trace || !trace.sounds) return;
+  const speed = parseFloat($("speed").value) || 1;
+  for (const s of trace.sounds) {
+    if (s.t > fromT && s.t <= toT) playSound(s, speed);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,8 +409,18 @@ function tick(now) {
   const advance = (dt * speed) / sampleMs;
   if (advance < 1) return;
   lastFrame = now;
+
+  const prevT = rows[Math.min(idx, rows.length - 1)][0];
   idx += Math.floor(advance);
-  if (idx >= rows.length) { idx = 0; }
+  const looped = idx >= rows.length;
+  if (looped) idx = 0;
+  const curT = rows[Math.min(idx, rows.length - 1)][0];
+
+  // Trigger sounds the playhead just crossed. On loop the window would run
+  // backwards, so restart it from the top of the trace instead.
+  if (looped) playSoundsBetween(rows[0][0] - 1, curT);
+  else playSoundsBetween(prevT, curT);
+
   render();
 }
 
@@ -278,6 +430,22 @@ $("play").onclick = () => {
   lastFrame = performance.now();
 };
 $("scrub").oninput = (e) => { idx = +e.target.value; render(); };
+
+// Browsers require a user gesture before audio can start, so the context is
+// created here rather than on load.
+$("mute").onclick = () => {
+  soundOn = !soundOn;
+  const btn = $("mute");
+  if (soundOn) {
+    const ok = ensureAudio();
+    if (!ok) { soundOn = false; btn.textContent = "no Web Audio"; return; }
+    btn.textContent = "🔊 sound on";
+    btn.classList.add("primary");
+  } else {
+    btn.textContent = "🔇 sound off";
+    btn.classList.remove("primary");
+  }
+};
 $("pick").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
   const f = e.target.files[0];

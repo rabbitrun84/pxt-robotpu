@@ -226,6 +226,17 @@
       "expectMotion": true,
       "description": "Kungfu for a robot with no arm servos. Four poses, two seconds each: ready stance, tiptoe with a front kick, forward lunge, then a wide leg split. Every shape is made with the legs and head; the arm servos stay at 90 throughout.",
       "note": "Leg-only rewrite of tutorials/kungfu.md. The original puts three of its four gaits in the shoulders/arms (servos 6-9), which are optional hardware."
+    },
+    {
+      "name": "sound-demo",
+      "file": "programs/sound-demo.ts",
+      "args": [
+        "--ms",
+        "8000"
+      ],
+      "expectMotion": true,
+      "description": "Startup chime then a short walk. Five queued background sounds run for 1.25s while the robot is already walking, followed by two blocking tones that hold the program up. Watch the audio lane under the strip chart.",
+      "note": "Exercises the music shim: InBackground queueing on a single channel vs UntilDone blocking."
     }
   ],
   "notRunnable": {

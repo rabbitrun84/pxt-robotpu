@@ -86,6 +86,7 @@ namespace driver {
             rows: hw.trace,
             buttons: planned,
             events: hw.events,
+            sounds: music.played,
             unknownI2c: hw.i2cUnknown,
             warnings: sim.warnings,
             foreverTasks: sim.foreverCount()

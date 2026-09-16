@@ -562,8 +562,13 @@ namespace pins {
         return idx >= 0 ? hw.servo[idx] : 0;
     }
     export function servoWritePin(pin: AnalogPin, value: number): void {
-        if (pin === AnalogPin.P14) hw.setServo(8, value);
-        else if (pin === AnalogPin.P15) hw.setServo(9, value);
+        // The hardware takes an integer angle and clamps it. pcb.servo() only
+        // floors/clamps on the I2C path (servos 0-7); servos 8-9 go out through
+        // here with whatever servoStep() produced, which can be fractional. Do
+        // what the board does, so the trace shows the angle actually commanded.
+        const a = Math.min(180, Math.max(0, Math.floor(value)));
+        if (pin === AnalogPin.P14) hw.setServo(8, a);
+        else if (pin === AnalogPin.P15) hw.setServo(9, a);
         sim.advanceMicros(hw.i2cCostUs);
     }
     export function analogWritePin(_pin: AnalogPin, _value: number): void { /* no-op */ }
@@ -579,20 +584,120 @@ namespace pins {
 
 // Movement-first: audio, radio and LEDs are recorded but not modelled.
 
+/**
+ * Audio.
+ *
+ * Sound is modelled for TIMING and recorded to the trace; no waveform is
+ * synthesised. Timing is the part that affects the robot: a play() that blocks
+ * holds up the whole program, and queued background sounds decide when the next
+ * one starts. Getting that wrong silently shifts every motion after it.
+ *
+ * The micro:bit has one background audio channel, so consecutive
+ * InBackground plays QUEUE rather than overlap. That is why the five calls in a
+ * typical init_sound() take 1.25s to finish even though the function returns at
+ * once.
+ *
+ * Not modelled: the microphone does not hear the speaker. On hardware it does,
+ * which matters for programs that dance to their own music — treat soundLevel()
+ * as external sound only.
+ */
 namespace music {
     export enum PlaybackMode { UntilDone = 1, InBackground = 2, LoopingInBackground = 3 }
+
+    export interface Sound {
+        wave: number; startFreq: number; endFreq: number;
+        startVol: number; endVol: number; ms: number;
+        effect: number; curve: number;
+    }
+
+    export let volume = 128;
+    export let speakerOn = true;
+
+    /** Virtual time at which the single background audio channel frees up. */
+    export let busyUntil = 0;
+
+    /** Everything played, for the trace. */
+    export let played: {
+        t: number; endT: number; ms: number; mode: number;
+        wave: number; freq0: number; freq1: number;
+        vol0: number; vol1: number; effect: number; curve: number; kind: string;
+    }[] = [];
+
+    export function reset(): void {
+        volume = 128;
+        speakerOn = true;
+        busyUntil = 0;
+        played = [];
+    }
+
+    function record(kind: string, ms: number, mode: number, wave: number, f0: number, f1: number,
+        v0: number, v1: number, effect: number, curve: number): number {
+        const start = Math.max(sim.now, mode === PlaybackMode.UntilDone ? sim.now : busyUntil);
+        played.push({
+            t: start, endT: start + ms, ms: ms, mode: mode,
+            wave: wave, freq0: f0, freq1: f1, vol0: v0, vol1: v1,
+            effect: effect, curve: curve, kind: kind,
+        });
+        return start;
+    }
+
+    export function createSoundExpression(
+        wave: number, startFreq: number, endFreq: number,
+        startVol: number, endVol: number, ms: number,
+        effect: number, curve: number
+    ): Sound {
+        return {
+            wave: wave, startFreq: startFreq, endFreq: endFreq,
+            startVol: startVol, endVol: endVol, ms: ms,
+            effect: effect, curve: curve,
+        };
+    }
+
+    /** Rough duration for a melody string: one beat per token. */
+    export function stringPlayable(s: string, tempo: number): Sound {
+        const beats = s.trim().split(/\s+/).filter(function (x) { return x.length > 0; }).length;
+        const ms = Math.round(beats * (60000 / Math.max(1, tempo)));
+        return {
+            wave: WaveShape.Square, startFreq: 440, endFreq: 440,
+            startVol: volume, endVol: volume, ms: ms,
+            effect: SoundExpressionEffect.None, curve: InterpolationCurve.Linear,
+        };
+    }
+
+    export function play(sound: Sound, mode: number = PlaybackMode.UntilDone): void {
+        const ms = sound && sound.ms ? sound.ms : 0;
+        const wave = sound ? sound.wave : 0;
+        const f0 = sound ? sound.startFreq : 0;
+        const f1 = sound ? sound.endFreq : 0;
+        const fx = sound ? sound.effect : 0;
+        const v0 = sound ? sound.startVol : 255;
+        const v1 = sound ? sound.endVol : 0;
+        const cv = sound ? sound.curve : 0;
+
+        if (mode === PlaybackMode.UntilDone) {
+            record("expr", ms, mode, wave, f0, f1, v0, v1, fx, cv);
+            busyUntil = sim.now + ms;
+            sim.pause(ms);           // blocks the caller
+            return;
+        }
+        // InBackground / LoopingInBackground: returns immediately, but the single
+        // audio channel serialises them.
+        const start = record("expr", ms, mode, wave, f0, f1, v0, v1, fx, cv);
+        busyUntil = start + ms;
+    }
+
     export function playTone(freq: number, ms: number): void {
         hw.logEvent("tone", freq + "@" + ms);
+        record("tone", ms, PlaybackMode.UntilDone, WaveShape.Square, freq, freq, volume, volume, 0, 0);
+        busyUntil = sim.now + ms;
         sim.pause(ms);
     }
+
     export function rest(ms: number): void { sim.pause(ms); }
-    export function setVolume(_v: number): void { /* no-op */ }
-    export function play(_p: any, _mode?: PlaybackMode): void { /* no-op */ }
-    export function stringPlayable(s: string, _tempo: number): any { return { s: s }; }
-    export function createSoundExpression(..._args: any[]): any { return {}; }
-    export function setBuiltInSpeakerEnabled(_on: boolean): void { /* no-op */ }
-    export function ringTone(_f: number): void { /* no-op */ }
-    export function stopAllSounds(): void { /* no-op */ }
+    export function setVolume(v: number): void { volume = v; }
+    export function setBuiltInSpeakerEnabled(on: boolean): void { speakerOn = on; }
+    export function ringTone(_f: number): void { /* continuous tone, no duration */ }
+    export function stopAllSounds(): void { busyUntil = sim.now; }
 }
 
 namespace radio {
@@ -718,6 +823,7 @@ namespace boot {
         sensors.reset();
         buttons.reset();
         logo.reset();
+        music.reset();
         settings.reset();
 
         // SIM_SOUND: "quiet" (default) or "beat[:bpm[:loud]]".
