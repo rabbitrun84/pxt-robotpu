@@ -237,6 +237,17 @@
       "expectMotion": true,
       "description": "Startup chime then a short walk. Five queued background sounds run for 1.25s while the robot is already walking, followed by two blocking tones that hold the program up. Watch the audio lane under the strip chart.",
       "note": "Exercises the music shim: InBackground queueing on a single channel vs UntilDone blocking."
+    },
+    {
+      "name": "music-riff",
+      "file": "programs/music-riff.ts",
+      "args": [
+        "--ms",
+        "12000"
+      ],
+      "expectMotion": true,
+      "description": "Robot PU marches to a driving bass riff. An original low minor-pentatonic ostinato at 124 BPM, accented on beats 1 and 3, with a noise hat on the offbeats. Walking runs on the background state machine so the music loop never blocks it. Turn sound on and play.",
+      "note": "Uses the midiToHz / bpmToBeatMs helpers from tutorials/music-pu.md. Exercises music + motion concurrently."
     }
   ],
   "notRunnable": {
