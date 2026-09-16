@@ -1,0 +1,35 @@
+{
+  "//": "Schematic kinematic model of Robot PU for the 3D view. Boxes only — this is a diagram of where the joints are, not a likeness of the product.",
+
+  "//units": "millimetres. Frame is robotics convention: +X forward, +Y left, +Z up. Origin at the chassis centre.",
+  "units": "mm",
+
+  "//provenance": "ESTIMATED, pending measurement. Two dimensions in the repo are exact and anchor the rest: the servo body is 22.8 x 12.2 x 28.5 mm (tutorials/specifications.md) and the chassis carries a micro:bit, which is 51.6 x 42.0 mm. Leg segments are one servo plus bracket; overall height lands near 170 mm. Replace these with real numbers — see PLAN-3d-view.md section 1.",
+  "estimated": true,
+
+  "links": {
+    "chassis": { "size": [44, 58, 70], "color": "#6b7484" },
+    "neck":    { "size": [16, 16, 12], "color": "#6b7484" },
+    "head":    { "size": [42, 38, 34], "color": "#9d7bff", "face": true },
+    "thighL":  { "size": [22, 16, 46], "color": "#4da3ff" },
+    "thighR":  { "size": [22, 16, 46], "color": "#ff6b6b" },
+    "footL":   { "size": [48, 28, 10], "color": "#4da3ff" },
+    "footR":   { "size": [48, 28, 10], "color": "#ff6b6b" }
+  },
+
+  "//sign": "Leg joints use sign -1. The links hang DOWNWARD (-Z) from their joint, so a positive rotation carries the far end backwards/right — the opposite of the 2D panels, where angle>90 means forward. Head pitch keeps +1 because the head grows UPWARD (+Z), which flips the sense back. Verified numerically against the 2D view math; see PLAN-3d-view.md risk 1.",
+  "//joints": "servo = index into the trace row. axis = rotation axis in the parent frame. origin = joint position in the parent's frame. Rendered rotation is (angle - 90) degrees; 90 is neutral.",
+  "joints": [
+    { "name": "LeftLeg",   "servo": 1, "axis": "y", "sign": -1, "parent": "chassis", "child": "thighL", "origin": [0, 21, -35] },
+    { "name": "LeftFoot",  "servo": 0, "axis": "x", "sign": -1, "parent": "thighL",  "child": "footL",  "origin": [0, 0, -46] },
+    { "name": "RightLeg",  "servo": 3, "axis": "y", "sign": -1, "parent": "chassis", "child": "thighR", "origin": [0, -21, -35] },
+    { "name": "RightFoot", "servo": 2, "axis": "x", "sign": -1, "parent": "thighR",  "child": "footR",  "origin": [0, 0, -46] },
+    { "name": "HeadYaw",   "servo": 4, "axis": "z", "sign":  1, "parent": "chassis", "child": "neck",   "origin": [0, 0, 35] },
+    { "name": "HeadPitch", "servo": 5, "axis": "y", "sign":  1, "parent": "neck",    "child": "head",   "origin": [0, 0, 12] }
+  ],
+
+  "//arms": "Servos 6-9 are deliberately absent. The ServoJoint enum disagrees with the hardware at indices 7-8 (see PLAN.md section 8), so rendering them would show the wrong limb moving — worse than showing none. Add once the mapping is confirmed on hardware.",
+
+  "//feet": "Foot links whose lowest corner defines ground contact, used to settle the figure onto the floor.",
+  "groundLinks": ["footL", "footR"]
+}

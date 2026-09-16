@@ -12,5 +12,8 @@
   },
   "devDependencies": {
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "three": "^0.186.0"
   }
 }

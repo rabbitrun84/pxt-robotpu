@@ -172,38 +172,38 @@ function drawFront(r) {
   const L = 74;
   ground(x, c, gy);
 
-  const la = rad(r[1] - 90);   // LeftFoot ankle roll
-  const ra = rad(r[3] - 90);   // RightFoot ankle roll
-  const roll = (la + ra) / 2;  // body roll = common-mode ankle
-  const HW = 32;               // half hip width, rigid
+  const HW = 32, PW = 15;      // half hip width; foot plate half length
 
-  // The hip bar is rigid and rotates with the body; each leg then points along
-  // its OWN ankle angle. Poses like Jump (LF 100 / RF 45) are kinematically
-  // over-constrained — with both feet flat the hips could not stay a fixed
-  // distance apart — so pinning the feet to the ground and solving for the hips
-  // produced a broken-looking figure. Hanging the legs off a rigid body instead
-  // always draws something coherent, and the ankle split stays plainly visible.
-  const hcy = gy - L;
-  let hlx = cx - HW * Math.cos(roll), hly = hcy - HW * Math.sin(roll);
-  let hrx = cx + HW * Math.cos(roll), hry = hcy + HW * Math.sin(roll);
+  // The ankle moves the FOOT, not the leg.
+  //
+  // Robot PU has no hip-roll servo: the only lateral degree of freedom is the
+  // ankle. So in this plane the legs are always parallel and vertical, and the
+  // ankle angle tilts nothing above it. An earlier version swung each whole leg
+  // from the hip by its ankle angle, which turned a wide ankle split (kungfu
+  // gait 4, ankles 4 / 179) into the robot doing the splits — and disagreed
+  // with the 3D view, which had the chain right.
+  //
+  // Angles are negated because this view is mirrored: facing the robot, its
+  // LEFT limb is on the viewer's RIGHT.
+  const la = -rad(r[1] - 90);
+  const ra = -rad(r[3] - 90);
+  const lhx = cx + HW, rhx = cx - HW;
 
-  let flx = hlx + L * Math.sin(la), fly = hly + L * Math.cos(la);
-  let frx = hrx + L * Math.sin(ra), fry = hry + L * Math.cos(ra);
+  // Drop the figure so the lowest plate corner rests on the floor. A rolled
+  // foot reaches further down than a flat one.
+  const drop = Math.max(Math.abs(Math.sin(la)), Math.abs(Math.sin(ra))) * PW;
+  const hy = gy - L - drop;
+  const fy = hy + L;
 
-  // Settle the figure so whichever foot is lowest rests on the ground.
-  const dy = gy - Math.max(fly, fry);
-  hly += dy; hry += dy; fly += dy; fry += dy;
+  limb(x, lhx, hy, lhx, fy, COLORS[0], 7);
+  limb(x, rhx, hy, rhx, fy, COLORS[2], 7);
+  footPlate(x, lhx, fy, la, COLORS[0]);
+  footPlate(x, rhx, fy, ra, COLORS[2]);
+  limb(x, lhx, hy, rhx, hy, "#6b7484", 11);
 
-  limb(x, hlx, hly, flx, fly, COLORS[0], 7);
-  limb(x, hrx, hry, frx, fry, COLORS[2], 7);
-  footPlate(x, flx, fly, la, COLORS[0]);
-  footPlate(x, frx, fry, ra, COLORS[2]);
-  limb(x, hlx, hly, hrx, hry, "#6b7484", 11);
-
-  const mhx = (hlx + hrx) / 2, mhy = (hly + hry) / 2;
   x.fillStyle = COLORS[4];
   x.beginPath();
-  x.arc(mhx + 34 * Math.sin(roll), mhy - 34 * Math.cos(roll), 15, 0, Math.PI * 2);
+  x.arc(cx, hy - 34, 15, 0, Math.PI * 2);
   x.fill();
 
   const diff = r[1] - r[3];
@@ -294,6 +294,8 @@ function render() {
   if (!rows.length) return;
   const r = rows[Math.min(idx, rows.length - 1)];
   drawSide(r); drawFront(r); readout(r); drawPlayhead();
+  // Guarded: robot3d.js is a deferred module and may not have loaded yet.
+  if (window.Robot3D) window.Robot3D.update(r);
   const t0 = rows[0][0];
   $("clock").textContent = `${((r[0] - t0) / 1000).toFixed(2)}s  (t=${r[0]})`;
   $("scrub").value = idx;
