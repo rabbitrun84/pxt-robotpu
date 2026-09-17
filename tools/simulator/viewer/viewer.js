@@ -201,10 +201,29 @@ function drawFront(r) {
   footPlate(x, rhx, fy, ra, COLORS[2]);
   limb(x, lhx, hy, rhx, hy, "#6b7484", 11);
 
+  // Head, with both eyes — we are facing the robot.
+  //
+  // The eyes slide across the face with HeadYaw, which is otherwise invisible in
+  // 2D: neither panel rotates the head horizontally, so without this a head turn
+  // shows up only as a number in the readout.
+  const hx0 = cx, hy0 = hy - 34;
   x.fillStyle = COLORS[4];
   x.beginPath();
-  x.arc(cx, hy - 34, 15, 0, Math.PI * 2);
+  x.arc(hx0, hy0, 15, 0, Math.PI * 2);
   x.fill();
+
+  const yaw = rad(r[5] - 90);
+  const gaze = 9 * Math.sin(yaw);          // +ve = robot's left = viewer's right
+  for (const side of [-1, 1]) {
+    x.fillStyle = "#e9eef7";
+    x.beginPath();
+    x.arc(hx0 + gaze + side * 5.4, hy0 - 1.5, 3.6, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = "#14161a";
+    x.beginPath();
+    x.arc(hx0 + gaze + side * 5.4, hy0 - 1.5, 1.7, 0, Math.PI * 2);
+    x.fill();
+  }
 
   const diff = r[1] - r[3];
   x.fillStyle = "#8b93a3"; x.font = "11px ui-monospace, monospace";

@@ -20,7 +20,25 @@
   }
   h1 { font-size: 15px; margin: 0; font-weight: 600; }
   .meta { color: var(--dim); font-size: 12px; }
-  main { display: flex; gap: 14px; padding: 14px 18px; flex-wrap: wrap; }
+  /* Fixed layout, deliberately not flexible: the robot views sit on the top
+     row and the joints table and chart always sit directly beneath them. Only
+     the 3D and chart columns absorb window width, so nothing ever reflows or
+     wraps to a different arrangement. */
+  main {
+    display: grid;
+    gap: 14px;
+    padding: 14px 18px;
+    grid-template-columns: 178px minmax(320px, 1fr) 458px 262px;
+    grid-template-areas:
+      "v3d    v3d   side  front"
+      "joints chart chart chart";
+    align-items: start;
+  }
+  #panel3d    { grid-area: v3d; }
+  #panelSide  { grid-area: side; }
+  #panelFront { grid-area: front; }
+  #panelJoints{ grid-area: joints; }
+  #panelChart { grid-area: chart; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
   .panel h2 {
     font-size: 11px; margin: 0 0 8px; color: var(--dim);
@@ -52,7 +70,6 @@
   }
   #about b { color: var(--ink); font-weight: 600; }
   #three { width: 100%; height: 480px; display: block; border-radius: 4px; }
-  #panel3d { flex: 1 1 640px; min-width: 460px; }
   .warn3d {
     color: var(--accent); font-weight: 400; text-transform: none;
     letter-spacing: 0; margin-left: 6px; font-size: 10px;
@@ -142,19 +159,19 @@ basic.forever(function () {
       <span class="meta" id="modelNote"></span>
     </div>
   </div>
-  <div class="panel">
+  <div class="panel" id="panelSide">
     <h2>Side view — leg swing</h2>
     <canvas id="side" width="430" height="330"></canvas>
   </div>
-  <div class="panel">
+  <div class="panel" id="panelFront">
     <h2>Front — ankle roll</h2>
     <canvas id="front" width="230" height="330"></canvas>
   </div>
-  <div class="panel">
+  <div class="panel" id="panelJoints">
     <h2>Joints</h2>
     <table id="readout"></table>
   </div>
-  <div class="panel" style="flex:1; min-width:380px">
+  <div class="panel" id="panelChart">
     <h2>Servo angles over time</h2>
     <canvas id="chart" width="900" height="200" style="width:100%"></canvas>
   </div>
